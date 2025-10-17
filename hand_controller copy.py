@@ -63,10 +63,10 @@ class HandController:
             3: {"MIN": 800, "MAX": 2000, "INVERT": False},
             4: {"MIN": 800, "MAX": 2000, "INVERT": False},
             5: {"MIN": 800, "MAX": 2000, "INVERT": False},
-            6: {"MIN": 800, "MAX": 2000, "INVERT": True},
-            7: {"MIN": 800, "MAX": 2000, "INVERT": True},
-            8: {"MIN": 800, "MAX": 2000, "INVERT": True},
-            9: {"MIN": 800, "MAX": 2000, "INVERT": True},
+            6: {"MIN": 800, "MAX": 2000, "INVERT": False},
+            7: {"MIN": 800, "MAX": 2000, "INVERT": False},
+            8: {"MIN": 800, "MAX": 2000, "INVERT": False},
+            9: {"MIN": 800, "MAX": 2000, "INVERT": False},
         }
 
         # 手勢庫
@@ -207,46 +207,17 @@ if __name__ == "__main__":
         print("[INFO] Connected:", hand.describe())
 
         # 左右同時握拳
-        hand.hand_move(0, 0, duration=500)
+        hand.hand_move(0, 0, duration=800)
         time.sleep(1.2)
 
 
         # 左右同時數字比1
-        hand.hand_move(1, 1, duration=500)
+        hand.hand_move(1, 1, duration=800)
         time.sleep(1.2)
 
         # 左右同時數字比2
-        hand.hand_move(2, 2, duration=500)
+        hand.hand_move(2, 0, duration=800)
         time.sleep(1.2)
-
-        # 左右同時數字比3
-        hand.hand_move(3, 3, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比4
-        hand.hand_move(4, 4, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比5
-        hand.hand_move(5, 5, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比6
-        hand.hand_move(6, 6, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比7
-        hand.hand_move(7, 7, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比8
-        hand.hand_move(8, 8, duration=500)
-        time.sleep(1.2)
-
-        # 左右同時數字比5
-        hand.hand_move(5, 5, duration=500)
-        time.sleep(1.2)
-
 
 
 
