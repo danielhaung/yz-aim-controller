@@ -15,7 +15,7 @@ MODBUS_BAUD = 19200
 HAND_BAUD   = 115200
 
 # ===== 解析 angles.txt =====
-ANGLE_COUNT = 19
+ANGLE_COUNT = 21
 _PARSE_RE = re.compile(
     r"""^\s*
         (?P<body>[-\d\s,]+?)                      # 19 個角度
@@ -75,6 +75,8 @@ def main(angles_file="angles.txt"):
 
     # 2) 建立馬達列表（沿用你的設定）
     motors = [
+    # 大頭    -20～-50
+    MotorController(client, slave_id=1, gear_ratio=100, speed=1300, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),     
     # 脖子    -90～-90
     MotorController(client, slave_id=2, gear_ratio=100, speed=1300, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
     # 右肩前後-90～-90
@@ -199,3 +201,7 @@ def main(angles_file="angles.txt"):
 
 if __name__ == "__main__":
     main()
+
+
+
+    
