@@ -1,0 +1,14 @@
+  GNU nano 6.2                                        /etc/systemd/system/robot-runner.service                                                 
+[Unit]
+Description=Robot mission runner (main.py + auto_move.py)
+After=network.target
+
+[Service]
+Type=oneshot
+User=agv
+Group=agv
+WorkingDirectory=/home/agv/yz-aim-controller
+ExecStart=/home/agv/yz-aim-controller/venv/bin/python /home/agv/yz-aim-controller/run_robot.py
+
+[Install]
+WantedBy=multi-user.target
