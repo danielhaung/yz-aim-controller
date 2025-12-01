@@ -1,7 +1,9 @@
-# main.py — 綠燈狀態 + 按鈕一次性觸發 Modbus coil + 程式跑完後回到未觸發
+# main.py — 綠燈狀態 + 按鈕一次性觸發 Modbus coil
+#           + 由 PC 的 HR[0] 回報「任務完成」
+
 import time
 from machine import Pin
-from modbus import RS485, crc16   # 直接使用你原本 modbus.py 裡的 RS485 & crc16
+from modbus import RS485, crc16, ModbusRTUMaster   # 直接使用你原本 modbus.py 裡的 RS485 & ModbusRTUMaster
 
 # === RS485 / Modbus Master 設定 ===
 UART_ID = 1
@@ -12,16 +14,19 @@ USE_DIR   = True
 DE_RE_PIN = 4
 DIR_SW_US = 400
 
-SLAVE_ID = 1          # PC 端 esp32_modbus.py 的 Unit ID
-COIL_ADDR = 0         # 我們在 PC 端用的就是 coil 0
+SLAVE_ID  = 1      # PC 端 esp32_modbus.py 的 Unit ID
+COIL_ADDR = 0      # 我們在 PC 端用的就是 coil 0
+HR_DONE_ADDR = 0   # 對應 PC 那邊 HR_MISSION_DONE = 0
 
-# 建立 RS485 物件（全域使用）
+# 建立 RS485 + Modbus Master 物件（全域使用）
 rs = RS485(UART_ID, BAUD, TX_PIN, RX_PIN, USE_DIR, DE_RE_PIN, DIR_SW_US)
+mb = ModbusRTUMaster(rs, timeout_ms=500, debug=False)
+
 
 def trigger_pc_mission():
     """
     發一筆 Modbus RTU: Write Single Coil (Function 0x05)
-    寫入：slave=SLAVE_ID, coil=COIL_ADDR, value=ON
+    寫入：slave=SLAVE_ID, coil=COIL_ADDR, value=ON (FF00)
     這個 frame 會被 PC 那邊的 esp32_modbus.py 收到，進而啟動 robot-runner.service
     """
     try:
@@ -56,16 +61,13 @@ green = Pin(GREEN_PIN, Pin.OUT)
 BTN_PIN = 33
 btn = Pin(BTN_PIN, Pin.IN, Pin.PULL_UP)   # 按鈕 → GND
 
-DEBOUNCE_MS = 200
+DEBOUNCE_MS   = 200
 BOOT_IGNORE_MS = 800
 
 # === LED 閃爍設定 ===
 BOOT_TIME_MS  = 5000      # 前 5 秒為「未開機」
-SLOW_BLINK_MS = 3000      # 慢閃週期
-FAST_BLINK_MS = 500       # 快閃週期
-
-# === 程式運行時間模擬（之後可以改成看 Modbus / DI 狀態） ===
-PROGRAM_RUN_MS = 3000     # 先假設「程式運行 3 秒」後算跑完
+SLOW_BLINK_MS = 8000      # 慢閃週期
+FAST_BLINK_MS = 2000       # 快閃週期
 
 # === 狀態 ===
 STATE_IDLE    = 0   # 開機完成、未觸發（快閃）
@@ -76,7 +78,7 @@ _pressed_flag = False
 _press_ts = 0
 
 _boot_ts = time.ticks_ms()
-_run_start_ts = None   # 記錄程式開始運行時間（running 開始的時間）
+_run_start_ts = None   # 只是用來標記“這次任務已經啟動”，避免誤判
 
 
 # --- 按鈕 IRQ ---
@@ -99,18 +101,26 @@ btn.irq(trigger=Pin.IRQ_FALLING, handler=_btn_irq_handler)
 # --- 程式是否跑完？ ---
 def is_program_done():
     """
-    現在先用「時間到」當作程式跑完。
-    未來你可以改成：
-      - 讀 Modbus HR/Coil：PC 寫一個「任務完成」旗標
-      - 或讀某個 DI 狀態
+    改成問 PC：HR[0] == 1 就代表任務真的跑完
     """
     global _run_start_ts
+
     if _run_start_ts is None:
+        # 尚未啟動任務，不需要查
         return False
 
-    now = time.ticks_ms()
-    if time.ticks_diff(now, _run_start_ts) >= PROGRAM_RUN_MS:
-        return True
+    try:
+        regs = mb.read_holding_registers(SLAVE_ID, HR_DONE_ADDR, 1)  # 從 HR[0] 讀 1 筆
+        done_flag = regs[0]
+
+        if done_flag != 0:
+            print(">>> PC 回報任務完成 (HR0=%d)" % done_flag)
+            # 如果你想讓 PC 知道 ESP32 已收到，也可以在這裡回寫一個 ack
+            return True
+
+    except Exception as e:
+        print("!!! 讀取 PC 任務完成旗標失敗:", e)
+
     return False
 
 
@@ -158,7 +168,7 @@ def main():
 
                 _pressed_flag = False
 
-        # === 2. 若正在運行，檢查程式是否跑完 ===
+        # === 2. 若正在運行，檢查程式是否跑完（問 PC 的 HR[0]） ===
         if _state == STATE_RUNNING:
             if is_program_done():
                 print(">>> PROGRAM DONE! 回到未觸發狀態")
