@@ -22,6 +22,8 @@ class HandController:
         6: {"name": "six/數字比6",   "pcts": [   0, 100,  100, 100,   0]},
         7: {"name": "seven/數字比7", "pcts": [   0,   0,  100,  100, 100]},
         8: {"name": "eight/數字比8", "pcts": [   0,   0,    0,  100, 100]},
+        9: {"name": "大拇指/左右比讚", "pcts": [  0, 100, 100,  100,  100]},
+    
     }
 
     @staticmethod
@@ -246,6 +248,18 @@ if __name__ == "__main__":
         # 左右同時數字比5
         hand.hand_move(5, 5, duration=500)
         time.sleep(1.2)
+
+        # 左右同時大拇指比讚
+        hand.hand_move(9, 9, duration=500)
+        time.sleep(1.2)
+
+         # 左右同時握拳
+        hand.hand_move(0, 0, duration=500)
+        time.sleep(1.2)
+
+        
+
+
 
 
 

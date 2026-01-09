@@ -5,3 +5,11 @@ pymodbus==3.9.2
 pyserial==3.5
 PyYAML==6.0.2
 serial==0.0.97
+
+
+
+
+
+
+
+

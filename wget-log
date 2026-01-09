@@ -1,0 +1,6 @@
+--2025-12-02 13:53:46--  https://code.visualstudio.com/sha/download?build=stable
+正在查找主機 code.visualstudio.com (code.visualstudio.com)... 13.107.246.73, 13.107.213.73, 2620:1ec:bdf::73, ...
+正在連接 code.visualstudio.com (code.visualstudio.com)|13.107.246.73|:443... 連上了。
+已送出 HTTP 要求，正在等候回應... 404 Not Found
+2025-12-02 13:53:47 錯誤 404: Not Found。
+

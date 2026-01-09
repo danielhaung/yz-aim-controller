@@ -163,7 +163,7 @@ def main():
     ap.add_argument("--clear-first", dest="clear_first", action="store_true", help="開始前先清空 angles.txt")
 
     # 新增：角度數量與手勢策略
-    ap.add_argument("--angles-n", type=int, default=19, help="每行預期的角度數量（預設 19）")
+    ap.add_argument("--angles-n", type=int, default=21, help="每行預期的角度數量（預設 19）")
     ap.add_argument("--default-gesture", type=str, default=None,
                     help="預設手勢 'L,R'（只有當該行沒寫手勢時才會補上）")
     ap.add_argument("--force-gesture", type=str, default=None,
@@ -217,3 +217,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
