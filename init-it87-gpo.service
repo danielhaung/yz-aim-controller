@@ -1,0 +1,58 @@
+# ============================================================
+# init-it87-gpo.service  (systemd service unit)
+#
+# 🔧 如何修改 / 佈署（標準流程）
+#
+# Step 1：在開發目錄（repo）中修改
+#         ~/yz-aim-controller/init-it87-gpo.service
+#
+# Step 2：確認內容正確後，複製到 systemd 服務目錄
+#
+#         cd ~/yz-aim-controller
+#         sudo cp init-it87-gpo.service /etc/systemd/system/init-it87-gpo.service
+#
+# Step 3：重新載入 systemd 並重啟服務
+#
+#         sudo systemctl daemon-reload
+#         sudo systemctl restart init-it87-gpo.service
+#         sudo systemctl status init-it87-gpo.service
+#
+# Step 4：觀察 / 驗證
+#         - LED (GPO6) 是否依關機按鈕邏輯閃爍
+#         - GPI1（關機按鈕）是否長按後觸發 shutdown
+#         - 三色燈狀態是否正確：
+#             * 開機中：黃燈慢閃（2 秒）
+#             * 開機完成但主程式未啟動：黃燈快閃（1 秒）
+#             * 主程式已啟動：綠燈長亮，黃/紅燈關閉
+#         - JSON 狀態檔是否正常更新：
+#             /home/robot/yz-aim-controller/GPIO.json
+#             /home/robot/yz-aim-controller/GPO_set.json
+#
+# ============================================================
+
+[Unit]
+Description=IT87 GPIO Watcher + LED State Machine
+After=multi-user.target
+
+[Service]
+Type=simple
+
+# 需要 GPIO / shutdown 權限
+User=root
+Group=root
+
+WorkingDirectory=/home/robot/yz-aim-controller
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 啟動前檢查必要工具是否存在
+ExecStartPre=/usr/bin/test -x /usr/bin/jq
+ExecStartPre=/usr/bin/test -x /usr/bin/gpioset
+ExecStartPre=/usr/bin/test -x /usr/bin/gpioget
+
+ExecStart=/bin/bash /home/robot/yz-aim-controller/init-it87-gpo.sh
+
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
