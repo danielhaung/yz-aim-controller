@@ -3,52 +3,24 @@ import re
 import sys
 import time
 import threading
-import subprocess
-import glob
 
 from pymodbus.client import ModbusSerialClient
 from motor_controller import MotorController
-from hand_controller import HandController   # 你提供的 class
+from hand_controller import HandController  # 你提供的 class
 
-# ===== 依序號自動找串口 =====
-# BG02QP86 = 身體 (Modbus)
-# BG02QKD5 = 手 (HandController)
-BODY_SERIAL = "BG02QP86"
-HAND_SERIAL = "BG02QKD5"
-
-def find_port_by_serial(target_serial: str):
-    """根據 FTDI 序號找到對應的 /dev/ttyUSB*，找不到回傳 None"""
-    ports = glob.glob("/dev/ttyUSB*")
-    for port in ports:
-        cmd = ["udevadm", "info", "-a", "-n", port]
-        try:
-            info = subprocess.check_output(
-                cmd, text=True, stderr=subprocess.DEVNULL
-            )
-        except Exception:
-            continue
-
-        if f'ATTRS{{serial}}=="{target_serial}"' in info:
-            return port
-    return None
-
-# 自動解析兩個實際的 port
-MODBUS_PORT = find_port_by_serial(BODY_SERIAL)
-HAND_PORT   = find_port_by_serial(HAND_SERIAL)
+# ===== 直接指定主機板 UART 串口 =====
+# 身體 (Modbus) → /dev/ttyS0
+# 手   (HandController) → /dev/ttyS1
+MODBUS_PORT = "/dev/ttyS0"
+HAND_PORT   = "/dev/ttyS1"
 MODBUS_BAUD = 19200
 HAND_BAUD   = 115200
 
-if MODBUS_PORT is None or HAND_PORT is None:
-    print("❌ 找不到指定序號的 FTDI 裝置：")
-    print("   身體序號:", BODY_SERIAL, "→", MODBUS_PORT)
-    print("   手序號  :", HAND_SERIAL, "→", HAND_PORT)
-    sys.exit(1)
-
-print(f"✅ 身體埠 (Modbus) → {MODBUS_PORT} (serial={BODY_SERIAL})")
-print(f"✅ 手埠   (Hand)   → {HAND_PORT} (serial={HAND_SERIAL})")
+print(f"✅ 身體埠 (Modbus) → {MODBUS_PORT} @ {MODBUS_BAUD}")
+print(f"✅ 手埠   (Hand)   → {HAND_PORT} @ {HAND_BAUD}")
 
 # ===== 解析 angles.txt =====
-ANGLE_COUNT = 21
+ANGLE_COUNT = 1
 _PARSE_RE = re.compile(
     r"""^\s*
         (?P<body>[-\d\s,]+?)                      # 角度
@@ -106,57 +78,57 @@ def main(angles_file="angles.txt"):
         sys.exit(1)
     print(f"✅ 已連線身體：{MODBUS_PORT} @ {MODBUS_BAUD}")
 
-   # 2) 建立馬達列表（沿用你的設定）
+    # 2) 建立馬達列表（沿用你的設定）
     motors = [
-    # 大頭    -20～-50
-    MotorController(client, slave_id=1, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),     
-    # 脖子    -90～-90
-    MotorController(client, slave_id=2, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
-    # 右肩前後-90～-90
-    MotorController(client, slave_id=3, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),    # 50×20 = 1000 ✅
-    # 右肩上下-60～-20
-    MotorController(client, slave_id=4, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),   # 120×20 = 2400 → 1500 ❌
-    # 右臂旋轉60～-20
-    MotorController(client, slave_id=5, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
-    # 右手軸彎曲-90～0
-    MotorController(client, slave_id=6, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 右手腕控制-90～-90
-    MotorController(client, slave_id=7, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左肩前後-90～-90
-    MotorController(client, slave_id=8, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),    # 50×20 = 1000 ✅
-    # 左肩上下-20～-60
-    MotorController(client, slave_id=9, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),   # 120×20 = 2400 → 1500 ❌
-    # 左臂旋轉-60～-20
-    MotorController(client, slave_id=10, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
-    # 左手軸彎曲-90～0
-    MotorController(client, slave_id=11, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左手腕控制-90～-90
-    MotorController(client, slave_id=12, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 腰部旋轉20～-20
-    MotorController(client, slave_id=13, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 右髖上下30～-30
-    MotorController(client, slave_id=14, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 右髖左右-20～0
-    MotorController(client, slave_id=15, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),  # 100×20 = 2000 → 1500 ❌
-    # 右膝蓋-30～0
-    MotorController(client, slave_id=16, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 右腳踝30～-30 
-    MotorController(client, slave_id=17, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左髖上下30～-30
-    MotorController(client, slave_id=18, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左髖左右0～20
-    MotorController(client, slave_id=19, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左膝蓋30～0
-    MotorController(client, slave_id=20, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-    # 左腳踝30～-30
-    MotorController(client, slave_id=21, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # 大頭    -20～-50
+        MotorController(client, slave_id=1, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 脖子    -90～-90
+        # MotorController(client, slave_id=2, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右肩前後-90～-90
+        # MotorController(client, slave_id=3, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右肩上下-60～-20
+        # MotorController(client, slave_id=4, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右臂旋轉60～-20
+        # MotorController(client, slave_id=5, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右手軸彎曲-90～0
+        # MotorController(client, slave_id=6, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右手腕控制-90～-90
+        # MotorController(client, slave_id=7, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左肩前後-90～-90
+        # MotorController(client, slave_id=8, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左肩上下-20～-60
+        # MotorController(client, slave_id=9, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左臂旋轉-60～-20
+        # MotorController(client, slave_id=10, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左手軸彎曲-90～0
+        # MotorController(client, slave_id=11, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左手腕控制-90～-90
+        # MotorController(client, slave_id=12, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 腰部旋轉20～-20
+        # MotorController(client, slave_id=13, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右髖上下30～-30
+        # MotorController(client, slave_id=14, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右髖左右-20～0
+        # MotorController(client, slave_id=15, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右膝蓋-30～0
+        # MotorController(client, slave_id=16, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 右腳踝30～-30
+        # MotorController(client, slave_id=17, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左髖上下30～-30
+        # MotorController(client, slave_id=18, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左髖左右0～20
+        # MotorController(client, slave_id=19, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左膝蓋30～0
+        # MotorController(client, slave_id=20, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+        # # 左腳踝30～-30
+        # MotorController(client, slave_id=21, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
     ]
 
     # 3) 手勢序列埠
     hand = HandController(port=HAND_PORT, baud=HAND_BAUD, open_immediately=True)
     print(f"✅ 已連線手：{HAND_PORT} @ {HAND_BAUD}")
     print("[INFO] Hand:", hand.describe())
-    
+
     # 👉 這裡宣告：機器人主程式已經初始化完成、進入待命狀態
     print("ROBOT_MAIN_READY", flush=True)
     previous_angles = None
@@ -237,9 +209,3 @@ def main(angles_file="angles.txt"):
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-    
