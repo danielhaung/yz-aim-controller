@@ -518,8 +518,6 @@ def build_argparser():
 
 def main():
     args = build_argparser().parse_args()
-
-    # 🔒 強制啟用，不管有沒有下 CLI
     args.exit_when_done = True
 
     print(f"✅ 身體埠 (Modbus) → {args.modbus_port} @ {args.modbus_baud}")
@@ -527,7 +525,7 @@ def main():
     print(f"📄 move={args.move}  angles={args.angles}")
     print(f"🔢 angles_n(move)={args.angles_n}  angle_count(robot)={args.angle_count}")
 
-    # ✅ main.py 一啟動就進入「運行中」：閃燈
+    # 啟動就閃燈
     blink_stop = threading.Event()
     blink_thread = threading.Thread(target=blink_gpo1, args=(blink_stop,), daemon=True)
     blink_thread.start()
@@ -550,20 +548,32 @@ def main():
         while not stop_event.is_set():
             time.sleep(0.05)
 
-        # ✅ 收到 stop_event 後，等 thread 收尾
         t_feed.join(timeout=args.exit_timeout + 2.0)
         t_robot.join(timeout=args.exit_timeout + 2.0)
 
     except KeyboardInterrupt:
         print("🛑 使用者中斷執行")
         stop_event.set()
+
     except Exception as e:
         print(f"❌ 啟動失敗：{e}")
         stop_event.set()
-    finally:
-        # ✅ main.py 結束：停止閃燈並回到常亮
+
+        # 失敗當下：先停閃燈，避免覆寫
         blink_stop.set()
-        time.sleep(0.2)   # 讓 blink thread 跳出
+        time.sleep(0.2)
+        blink_thread.join(timeout=1.0)
+
+        # 失敗也常亮
+        set_gpo1(1)
+
+        robot.close()
+        return
+
+    finally:
+        # 結束：停止閃燈，回到常亮
+        blink_stop.set()
+        time.sleep(0.2)
         blink_thread.join(timeout=1.0)
         set_gpo1(1)
 
