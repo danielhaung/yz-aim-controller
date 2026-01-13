@@ -566,17 +566,14 @@ def main():
 
         # 失敗也常亮
         set_gpo1(1)
-
-        robot.close()
         return
 
     finally:
-        # 結束：停止閃燈，回到常亮
         blink_stop.set()
         time.sleep(0.2)
-        blink_thread.join(timeout=1.0)
+        if blink_thread.is_alive():
+            blink_thread.join(timeout=1.0)
         set_gpo1(1)
-
         robot.close()
 
 if __name__ == "__main__":
