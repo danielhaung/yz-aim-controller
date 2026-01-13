@@ -1,0 +1,68 @@
+# ============================================================
+# robot.service  (systemd service unit)
+#
+# 功能說明
+#
+# - 監聽 GPIO.json 中的 GPI["1"]
+# - 當 GPI["1"] == 1 時，觸發並執行 main.py
+# - main.py 結束後：
+#     * 若 Restart=no       → service 結束
+#     * 若 Restart=always   → 回到等待 GPI["1"] == 1 的狀態
+#
+# - 本 service **不直接操作 GPIO**
+#   GPIO 狀態由 init-it87-gpo.service 負責維護
+#
+#
+# 如何修改 / 佈署（標準流程）
+#
+# Step 1：在開發目錄（repo）中修改
+#         ~/yz-aim-controller/robot.service
+#
+# Step 2：確認內容正確後，複製到 systemd 服務目錄
+#
+#         cd ~/yz-aim-controller
+#         sudo cp robot.service /etc/systemd/system/robot.service
+#
+# Step 3：重新載入 systemd 並啟動服務
+#
+#         sudo systemctl daemon-reload
+#         sudo systemctl enable robot.service
+#         sudo systemctl start robot.service
+#
+# Step 4：觀察 / 驗證
+#
+#         - GPIO.json 是否持續更新：
+#             /home/robot/yz-aim-controller/GPIO.json
+#
+#         - 當 GPI["1"] = 1：
+#             → main.py 是否被觸發執行
+#
+#         - main.py 執行期間：
+#             → 可用 journalctl 觀察 log
+#
+#         - main.py 結束後：
+#             → service 是否依 Restart 設定行為正確
+#
+#         指令：
+#             sudo systemctl status robot.service
+#             sudo journalctl -u robot.service -f
+#
+# ============================================================
+
+[Unit]
+Description=Robot main program (one-shot, triggered by init-it87-gpo when GPI1=1)
+After=init-it87-gpo.service
+Requires=init-it87-gpo.service
+
+[Service]
+Type=simple
+User=robot
+Group=robot
+WorkingDirectory=/home/robot/yz-aim-controller
+
+ExecStart=/home/robot/yz-aim-controller/venv/bin/python /home/robot/yz-aim-controller/main.py --exit-when-done
+
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

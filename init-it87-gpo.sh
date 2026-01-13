@@ -42,6 +42,11 @@ GPI_LINES=(56 57 58 59 60 61 62 63)     # GPI1~8
 
 LOOP_SLEEP=0.1
 
+# ✅ trigger 設定
+LATCH_FILE="/run/robot_gpi1_latched"
+ROBOT_UNIT="robot.service"
+SYSTEMCTL="/usr/bin/systemctl"
+
 mkdir -p "$BASE_DIR"
 
 # 初始化 JSON_STATE
@@ -65,12 +70,24 @@ EOF
 fi
 
 while true; do
-  # ---- 讀 GPI 狀態（只記錄，不做任何邏輯）----
+  # ---- 讀 GPI 狀態 ----
   for i in {1..8}; do
     line=${GPI_LINES[$((i-1))]}
     v=$(gpioget "$CHIP" "$line" 2>/dev/null || echo 0)
     eval GPI_$i=$v
   done
+
+  # ✅ 監看 GPI1 觸發 robot.service（latch 防連續觸發）
+  gpi1="${GPI_1:-0}"
+  if [ "$gpi1" -eq 1 ]; then
+    if [ ! -f "$LATCH_FILE" ]; then
+      touch "$LATCH_FILE"
+      # 不要讓 systemctl 失敗把整個 service 搞掛（set -e 會中斷），所以加 || true
+      $SYSTEMCTL start "$ROBOT_UNIT" || true
+    fi
+  else
+    rm -f "$LATCH_FILE"
+  fi
 
   # ---- 讀取並套用 GPO_set.json（唯一控制來源）----
   changed=0
