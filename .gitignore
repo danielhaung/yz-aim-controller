@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Runtime files
+angles.txt
+GPO_set.json
+
+# OS
+.DS_Store

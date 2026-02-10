@@ -13,9 +13,36 @@ from pymodbus.client import ModbusSerialClient
 from motor_controller import MotorController
 from hand_controller import HandController
 import json
-
+import subprocess
 
 GPO_SET = Path("/home/robot/yz-aim-controller/GPO_set.json")
+
+
+VOICE_DIR = Path("/home/robot/yz-aim-controller/voice")
+
+def play_mp3(name: str, blocking: bool = False) -> bool:
+    """
+    播放 voice 資料夾內的 mp3，例如 play_mp3("welcome.mp3")
+    blocking=False 代表背景播放，不會卡住機器人動作流程
+    """
+    mp3 = (VOICE_DIR / name) if not name.startswith("/") else Path(name)
+
+    if not mp3.exists():
+        print(f"⚠️ 找不到語音檔：{mp3}")
+        return False
+
+    cmd = ["mpg123", "-q", str(mp3)]
+    try:
+        if blocking:
+            subprocess.run(cmd, check=True)
+        else:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        print(f"⚠️ 播放失敗：{e}")
+        return False
+
+
 
 def write_atomic_json(path: Path, obj: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,14 +93,34 @@ _PARSE_RE = re.compile(
     r"""^\s*
         (?P<body>[-\d\s,]+?)                                  # angles CSV/space
         (?:\s*\(\s*(?P<L>\d+)\s*,\s*(?P<R>\d+)\s*\)\s*)?      # optional (L,R)
+        (?:\s*\#(?P<tag>\d+)\s*)?                             # optional: #7 at end
         \s*$""",
     re.X
 )
 
+
+def start_mp3(name: str) -> Optional[subprocess.Popen]:
+    mp3 = (VOICE_DIR / name) if not name.startswith("/") else Path(name)
+    if not mp3.exists():
+        print(f"⚠️ 找不到語音檔：{mp3}")
+        return None
+    try:
+        return subprocess.Popen(
+            ["mpg123", "-q", str(mp3)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except Exception as e:
+        print(f"⚠️ 播放失敗：{e}")
+        return None
+
+
 def parse_angles_line(line: str, angle_count: int):
     m = _PARSE_RE.match(line.strip())
     if not m:
-        raise ValueError("格式不符：請提供角度，或 角度 後接 (L,R)。")
+        raise ValueError("格式不符：角度 + 可選 (L,R) + 可選行尾 #tag")
+
+    tag = int(m.group("tag")) if m.group("tag") is not None else None
 
     body = m.group("body")
     toks = [t for t in re.split(r"[,\s]+", body.strip()) if t != ""]
@@ -83,7 +130,10 @@ def parse_angles_line(line: str, angle_count: int):
     angles = [int(float(x)) for x in toks]
     L = int(m.group("L")) if m.group("L") is not None else None
     R = int(m.group("R")) if m.group("R") is not None else None
-    return angles, L, R
+    return angles, L, R, tag
+
+
+
 
 def proportional_speed(distance_deg, max_distance_deg, max_rpm, ratio=0.8):
     if max_distance_deg <= 0:
@@ -119,7 +169,8 @@ class RobotRuntime:
         self.args = args
         self.ready_event = ready_event
         self.stop_event = stop_event
-
+        self._voice_proc = None
+        self._voice_tag_playing = None
         self.client: Optional[ModbusSerialClient] = None
         self.hand: Optional[HandController] = None
         self.motors: List[MotorController] = []
@@ -218,11 +269,44 @@ class RobotRuntime:
                 continue
 
             try:
-                angle_list, L_idx, R_idx = parse_angles_line(raw, self.args.angle_count)
+                angle_list, L_idx, R_idx, tag = parse_angles_line(raw, self.args.angle_count)
+
+                TAG_VOICE = {
+                    1: "welcome.mp3",
+                    # 8: "other.mp3",
+                }
+
+                if tag is not None and tag in TAG_VOICE:
+                    is_playing = (self._voice_proc is not None and self._voice_proc.poll() is None)
+
+                    if is_playing:
+                        if self._voice_tag_playing == tag:
+                            # 同一個 tag 還在播：不重播
+                            pass
+                        else:
+                            # 不同 tag 來了：打斷上一首
+                            try:
+                                self._voice_proc.terminate()
+                                try:
+                                    self._voice_proc.wait(timeout=0.2)
+                                except subprocess.TimeoutExpired:
+                                    self._voice_proc.kill()
+                            except Exception:
+                                pass
+
+                            self._voice_proc = start_mp3(TAG_VOICE[tag])
+                            self._voice_tag_playing = tag
+                    else:
+                        # 沒在播：直接播
+                        self._voice_proc = start_mp3(TAG_VOICE[tag])
+                        self._voice_tag_playing = tag
+
+
             except Exception as e:
                 print(f"❌ 解析失敗：{e}")
                 time.sleep(0.1)
                 continue
+
 
             # 首輪：只記錄角度（不做差值速度比例），可選擇也下手勢
             if self.previous_angles is None:
@@ -317,8 +401,11 @@ FRAME_RE = re.compile(r"""
     (?P<angles>-?\d+(?:\s*,\s*-?\d+)*)          # CSV ints
     \s*
     (?:\(\s*(?P<L>\d+)\s*,\s*(?P<R>\d+)\s*\))?  # optional (L,R)
+    \s*
+    (?:\#(?P<tag>\d+)\s*)?                      # optional #tag at end
     \s*$
 """, re.X)
+
 
 def parse_lr(s: Optional[str]) -> Optional[Tuple[int,int]]:
     if s is None:
@@ -328,11 +415,14 @@ def parse_lr(s: Optional[str]) -> Optional[Tuple[int,int]]:
         raise ValueError("gesture 需為 'L,R' 兩個整數")
     return int(parts[0]), int(parts[1])
 
-def normalize_frame(angles: List[int], L: Optional[int], R: Optional[int]) -> str:
+def normalize_frame(angles: List[int], L: Optional[int], R: Optional[int], tag: Optional[int] = None) -> str:
     base = ",".join(str(a) for a in angles)
-    if L is None or R is None:
-        return base
-    return f"{base}({L},{R})"
+    if L is not None and R is not None:
+        base += f"({L},{R})"
+    if tag is not None:
+        base += f"#{tag}"
+    return base
+
 
 def parse_move_file(path: Path,
                     expected_n: int,
@@ -363,6 +453,10 @@ def parse_move_file(path: Path,
             if not m:
                 continue
 
+            tag = m.group("tag")
+            tag = int(tag) if tag is not None else None
+
+
             if cur_key is None:
                 cur_key = (0, "Default")
                 sections.setdefault(cur_key, [])
@@ -383,7 +477,8 @@ def parse_move_file(path: Path,
             elif (L is None or R is None) and default_lr is not None:
                 L, R = default_lr
 
-            sections[cur_key].append(normalize_frame(angles, L, R))
+            sections[cur_key].append(normalize_frame(angles, L, R, tag))
+
 
     if not sections:
         raise ValueError("move.txt 沒有解析出任何段落/角度行。")
@@ -427,7 +522,8 @@ def clear_file(path: Path):
 
 def feed_frames(frames: List[str], angles_path: Path, poll: float,
                 stop_event: threading.Event,
-                dry_run: bool = False):
+                dry_run: bool = False,
+                section_idx: Optional[int] = None):
     for idx, payload in enumerate(frames, 1):
         if stop_event.is_set():
             return
@@ -437,11 +533,14 @@ def feed_frames(frames: List[str], angles_path: Path, poll: float,
                 return
             time.sleep(poll)
 
+        tagged_payload = payload
+
         if dry_run:
-            print(f"[dry-run] 將寫入：{payload}")
+            print(f"[dry-run] 將寫入：{tagged_payload}")
         else:
-            write_atomic(angles_path, payload)
-            print(f"[feed] -> {angles_path.name} : {payload}")
+            write_atomic(angles_path, tagged_payload)
+            print(f"[feed] -> {angles_path.name} : {tagged_payload}")
+
 
 class FeederRuntime:
     def __init__(self, args, ready_event: threading.Event, stop_event: threading.Event):
@@ -501,7 +600,8 @@ class FeederRuntime:
             print(f"\n[section] {idx}. {title}  （{len(frames)} 筆）")
             feed_frames(frames, angles_path, self.args.poll,
                         stop_event=self.stop_event,
-                        dry_run=self.args.dry_run)
+                        dry_run=self.args.dry_run,
+                        section_idx=idx)
 
         print("\n[feeder] ✅ 全部餵完。")
 
@@ -533,7 +633,7 @@ def build_argparser():
     ap.add_argument("--angles", default="angles.txt")
 
     # counts
-    ap.add_argument("--angles-n", type=int, default=1, help="move.txt 每行角度數（你資料是 21）")
+    ap.add_argument("--angles-n", type=int, default=21, help="move.txt 每行角度數（你資料是 21）")
     ap.add_argument("--angle-count", type=int, default=21, help="Robot 解析 angles.txt 角度數（要跟 angles-n 對齊）")
 
     # feeder controls
