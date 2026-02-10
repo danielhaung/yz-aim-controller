@@ -19,19 +19,16 @@ GPO_SET = Path("/home/robot/yz-aim-controller/GPO_set.json")
 
 
 VOICE_DIR = Path("/home/robot/yz-aim-controller/voice")
+AUDIO_DEV = "plughw:CARD=CD002AUDIO,DEV=0"   # ✅ 你測到會出聲的裝置
+MPG123 = "/usr/bin/mpg123"
 
 def play_mp3(name: str, blocking: bool = False) -> bool:
-    """
-    播放 voice 資料夾內的 mp3，例如 play_mp3("welcome.mp3")
-    blocking=False 代表背景播放，不會卡住機器人動作流程
-    """
     mp3 = (VOICE_DIR / name) if not name.startswith("/") else Path(name)
-
     if not mp3.exists():
         print(f"⚠️ 找不到語音檔：{mp3}")
         return False
 
-    cmd = ["mpg123", "-q", str(mp3)]
+    cmd = [MPG123, "-q", "-o", "alsa", "-a", AUDIO_DEV, str(mp3)]
     try:
         if blocking:
             subprocess.run(cmd, check=True)
@@ -42,6 +39,7 @@ def play_mp3(name: str, blocking: bool = False) -> bool:
         print(f"⚠️ 播放失敗：{e}")
         return False
 
+ 
 
 
 def write_atomic_json(path: Path, obj: dict):
@@ -106,13 +104,15 @@ def start_mp3(name: str) -> Optional[subprocess.Popen]:
         return None
     try:
         return subprocess.Popen(
-            ["mpg123", "-q", str(mp3)],
+            [MPG123, "-q", "-o", "alsa", "-a", AUDIO_DEV, str(mp3)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
     except Exception as e:
         print(f"⚠️ 播放失敗：{e}")
         return None
+
+
 
 
 def parse_angles_line(line: str, angle_count: int):
@@ -273,7 +273,7 @@ class RobotRuntime:
 
                 TAG_VOICE = {
                     1: "welcome.mp3",
-                    # 8: "other.mp3",
+                    2: "傳動減速機_品牌介紹.mp3",
                 }
 
                 if tag is not None and tag in TAG_VOICE:

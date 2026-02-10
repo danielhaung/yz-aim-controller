@@ -77,17 +77,23 @@ while true; do
     eval GPI_$i=$v
   done
 
-  # ✅ 監看 GPI1 觸發 robot.service（latch 防連續觸發）
+  # ✅ GPI1=1 時：robot.service 沒在跑才啟動；跑完後若 GPI1 仍為 1 會再次啟動
   gpi1="${GPI_1:-0}"
+
   if [ "$gpi1" -eq 1 ]; then
-    if [ ! -f "$LATCH_FILE" ]; then
-      touch "$LATCH_FILE"
-      # 不要讓 systemctl 失敗把整個 service 搞掛（set -e 會中斷），所以加 || true
+    if $SYSTEMCTL is-active --quiet "$ROBOT_UNIT"; then
+      # robot.service 正在跑：不重啟，只維持 latch
+      : > "$LATCH_FILE"
+    else
+      # robot.service 沒在跑（已結束或未啟動）：啟動它
       $SYSTEMCTL start "$ROBOT_UNIT" || true
+      : > "$LATCH_FILE"
     fi
   else
+    # GPI1=0：清 latch
     rm -f "$LATCH_FILE"
   fi
+
 
   # ---- 讀取並套用 GPO_set.json（唯一控制來源）----
   changed=0
