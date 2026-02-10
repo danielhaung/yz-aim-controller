@@ -137,9 +137,49 @@ class RobotRuntime:
 
         # 2) create motors (你原本只開 1 顆，其他註解保留；你可自行加回來)
         self.motors = [
-            MotorController(self.client, slave_id=1, gear_ratio=100,
-                            speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
-        ]
+            # 大頭    -20～-50
+            MotorController(self.client, slave_id=1, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),        
+            # # 脖子    -90～-90
+            MotorController(self.client, slave_id=2, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
+            # # 右肩前後-90～-90
+            MotorController(self.client, slave_id=3, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),    # 50×20 = 1000 ✅
+            # # 右肩上下-60～-20
+            MotorController(self.client, slave_id=4, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),   # 120×20 = 2400 → 1500 ❌
+            # # 右臂旋轉60～-20
+            MotorController(self.client, slave_id=5, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
+            # # 右手軸彎曲-90～0
+            MotorController(self.client, slave_id=6, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 右手腕控制-90～-90
+            MotorController(self.client, slave_id=7, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左肩前後-90～-90
+            MotorController(self.client, slave_id=8, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),    # 50×20 = 1000 ✅
+            # # 左肩上下-20～-60
+            MotorController(self.client, slave_id=9, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),   # 120×20 = 2400 → 1500 ❌
+            # # 左臂旋轉-60～-20
+            MotorController(self.client, slave_id=10, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000), 
+            # # 左手軸彎曲-90～0
+            MotorController(self.client, slave_id=11, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左手腕控制-90～-90
+            MotorController(self.client, slave_id=12, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 腰部旋轉20～-20
+            MotorController(self.client, slave_id=13, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 右髖上下30～-30
+            MotorController(self.client, slave_id=14, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 右髖左右-20～0
+            MotorController(self.client, slave_id=15, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),  # 100×20 = 2000 → 1500 ❌
+            # # 右膝蓋-30～0
+            MotorController(self.client, slave_id=16, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 右腳踝30～-30 
+            MotorController(self.client, slave_id=17, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左髖上下30～-30
+            MotorController(self.client, slave_id=18, gear_ratio=100, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左髖左右0～20
+            MotorController(self.client, slave_id=19, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左膝蓋30～0
+            MotorController(self.client, slave_id=20, gear_ratio=120, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+            # # 左腳踝30～-30
+            MotorController(self.client, slave_id=21, gear_ratio=50, speed=1200, accel=2000, speed_kp=12000, speed_ki=10, pos_kp=5000),
+    ]
 
         # 角度數必須 >= motors 數（否則會 index error）
         if self.args.angle_count < len(self.motors):
@@ -494,7 +534,7 @@ def build_argparser():
 
     # counts
     ap.add_argument("--angles-n", type=int, default=1, help="move.txt 每行角度數（你資料是 21）")
-    ap.add_argument("--angle-count", type=int, default=1, help="Robot 解析 angles.txt 角度數（要跟 angles-n 對齊）")
+    ap.add_argument("--angle-count", type=int, default=21, help="Robot 解析 angles.txt 角度數（要跟 angles-n 對齊）")
 
     # feeder controls
     ap.add_argument("--poll", type=float, default=0.10)
