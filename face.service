@@ -1,0 +1,21 @@
+[Unit]
+Description=Robot Face Display
+After=graphical.target
+
+[Service]
+Type=simple
+User=robot
+Group=robot
+WorkingDirectory=/home/robot/yz-aim-controller
+
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/robot/.Xauthority
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/home/robot/yz-aim-controller/venv/bin/python /home/robot/yz-aim-controller/face.py
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical.target
