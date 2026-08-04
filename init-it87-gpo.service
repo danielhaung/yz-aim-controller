@@ -22,8 +22,8 @@
 #         - GPI1（關機按鈕）是否長按後觸發 shutdown
 #         - 三色燈狀態是否正確：
 #             * 開機中：黃燈慢閃（2 秒）
-#             * 開機完成但主程式未啟動：黃燈快閃（1 秒）
-#             * 主程式已啟動：綠燈長亮，黃/紅燈關閉
+#             * 開機完成但 robot.service 未啟動：黃燈快閃（1 秒）
+#             * robot.service active：綠燈長亮，黃/紅燈關閉
 #         - JSON 狀態檔是否正常更新：
 #             /home/robot/yz-aim-controller/GPIO.json
 #             /home/robot/yz-aim-controller/GPO_set.json
@@ -37,18 +37,22 @@ After=multi-user.target
 [Service]
 Type=simple
 
-# 需要 GPIO / shutdown 權限
+# 建議明確指定 root（需要 GPIO / shutdown 權限）
 User=root
 Group=root
 
+# ✅ 指到 repo，避免相對路徑問題
 WorkingDirectory=/home/robot/yz-aim-controller
+
+# ✅ 確保 systemd 環境能找到必要工具
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# 啟動前檢查必要工具是否存在
+# ✅ 啟動前檢查必要工具是否存在（缺少會直接顯示在 status）
 ExecStartPre=/usr/bin/test -x /usr/bin/jq
 ExecStartPre=/usr/bin/test -x /usr/bin/gpioset
 ExecStartPre=/usr/bin/test -x /usr/bin/gpioget
 
+# ✅ 啟動 GPIO 監控與燈號狀態機
 ExecStart=/bin/bash /home/robot/yz-aim-controller/init-it87-gpo.sh
 
 Restart=always
