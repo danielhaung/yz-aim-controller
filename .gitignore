@@ -12,3 +12,5 @@ GPO_set.json
 
 # OS
 .DS_Store
+__pycache__/
+*.pyc

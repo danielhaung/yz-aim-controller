@@ -272,8 +272,9 @@ class RobotRuntime:
                 angle_list, L_idx, R_idx, tag = parse_angles_line(raw, self.args.angle_count)
 
                 TAG_VOICE = {
-                    1: "welcome.mp3",
-                    2: "傳動減速機_品牌介紹.mp3",
+                    1: "1welcome.mp3",
+                    2: "2welcome_M.mp3",
+                    3: "3傳動減速機_品牌介紹.mp3",
                 }
 
                 if tag is not None and tag in TAG_VOICE:
