@@ -68,8 +68,6 @@ class MotorController:
 
         print(f"[ID {self.slave_id}] ✅ 驅動器{'啟用' if enable else '關閉'}成功")
 
-        if enable:
-            self.read_position()
         return True
 
     def config_parameters(self, speed=None, accel=None, speed_kp=None, speed_ki=None, pos_kp=None,
@@ -125,20 +123,83 @@ class MotorController:
         print(f"[ID {self.slave_id}] ✅ 移動到位置 {position}")
         return True
 
-    # def read_position(self):
-    #     res = self.client.read_holding_registers(address=0x16, count=2, slave=self.slave_id)
-    #     if not res.isError():
-    #         low, high = res.registers
-    #         pos = (high << 16) | low
-    #         if pos >= (1 << 31):
-    #             pos -= (1 << 32)
-    #         angle = pos / (self.pulses_per_rev * self.gear_ratio) * 360
-    #         print(f"📍 當前位置：{pos} 脈波（{angle:.2f}°）")
-    #         return pos
-    #     print("⚠️ 無法讀取目前位置")
-    #     return None
+    def check_alive(self):
+        """
+        動作前快速通訊檢查
 
+        只讀取一個暫存器：
+        0x10 = 實際速度
 
+        只判斷馬達是否有正常 Modbus 回覆。
+        數值是多少不重要，0 也代表正常。
+        """
+
+        try:
+            result = self.client.read_holding_registers(
+                address=0x10,
+                count=1,
+                slave=self.slave_id
+            )
+
+            if result.isError():
+                print(f"[ID {self.slave_id}] ❌ 通訊檢查失敗")
+                return False
+
+            raw_speed = result.registers[0]
+
+            if raw_speed >= 0x8000:
+                raw_speed -= 0x10000
+
+            speed_rpm = raw_speed / 10.0
+
+            print(
+                f"[ID {self.slave_id}] ✅ 通訊正常 "
+                f"(速度={speed_rpm:.1f} r/min)"
+            )
+
+            return True
+
+        except Exception as e:
+            print(f"[ID {self.slave_id}] ❌ 通訊異常：{e}")
+            return False
+    def read_position_only(self):
+        """
+        動作過程專用：
+        只讀目前位置 0x16 / 0x17
+
+        目的：
+        - 降低 Modbus 通訊量
+        - 不讀電流 0x0F
+        - 不讀速度 0x10
+        - 成功回傳 signed 32-bit position
+        - 失敗回傳 None
+        """
+
+        try:
+            res = self.client.read_holding_registers(
+                address=0x16,
+                count=2,
+                slave=self.slave_id
+            )
+
+            if res.isError():
+                print(f"[ID {self.slave_id}] ❌ 位置讀取失敗")
+                return None
+
+            low, high = res.registers
+
+            pos = (high << 16) | low
+
+            # 32-bit signed 補正
+            if pos >= (1 << 31):
+                pos -= (1 << 32)
+
+            return pos
+
+        except Exception as e:
+            print(f"[ID {self.slave_id}] ❌ 位置讀取異常：{e}")
+            return None
+            
     def read_position(self):
         status = {
             "position": "❌",

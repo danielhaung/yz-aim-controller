@@ -141,28 +141,97 @@ def proportional_speed(distance_deg, max_distance_deg, max_rpm, ratio=0.8):
     v = int((distance_deg / max_distance_deg) * max_rpm * ratio)
     return max(1, min(v, max_rpm))
 
-def move_and_monitor(motor: MotorController, angle_deg: float, speed_rpm=None, tolerance=100):
+def move_and_monitor(
+    motor: MotorController,
+    angle_deg: float,
+    speed_rpm=None,
+    tolerance=100
+):
     try:
+
+        # ==========================================
+        # 設定速度
+        # ==========================================
         if speed_rpm is not None:
             if hasattr(motor, "set_speed_rpm"):
                 motor.set_speed_rpm(int(speed_rpm))
+
             elif hasattr(motor, "speed"):
                 motor.speed = int(speed_rpm)
 
-        if not hasattr(motor, "move_to_angle"):
-            raise RuntimeError("MotorController 需實作 move_to_angle(angle_deg)")
 
+        # ==========================================
+        # 確認 MotorController 支援角度移動
+        # ==========================================
+        if not hasattr(motor, "move_to_angle"):
+            raise RuntimeError(
+                "MotorController 需實作 move_to_angle(angle_deg)"
+            )
+
+
+        # ==========================================
+        # 下達移動命令
+        # ==========================================
         motor.move_to_angle(angle_deg)
 
-        target_pulses = int(round(angle_deg / 360.0 * motor.pulses_per_rev * motor.gear_ratio))
-        for _ in range(100):  # 100*50ms = 5s
-            current_pulses = motor.read_position()
-            if abs(current_pulses - target_pulses) <= tolerance:
+
+        # ==========================================
+        # 計算目標脈波
+        # ==========================================
+        target_pulses = int(round(
+            angle_deg / 360.0
+            * motor.pulses_per_rev
+            * motor.gear_ratio
+        ))
+
+
+        # ==========================================
+        # 動作中監控
+        #
+        # 只讀 0x16 / 0x17 位置
+        # 不再讀電流、速度
+        # ==========================================
+        for _ in range(100):
+
+            current_pulses = motor.read_position_only()
+
+
+            # ------------------------------
+            # 通訊讀取失敗
+            # ------------------------------
+            if current_pulses is None:
+
+                raise RuntimeError(
+                    f"ID {motor.slave_id} 動作中位置讀取失敗"
+                )
+
+
+            # ------------------------------
+            # 到達目標
+            # ------------------------------
+            if abs(
+                current_pulses - target_pulses
+            ) <= tolerance:
+
+                print(
+                    f"[ID {motor.slave_id}] ✅ 到位 "
+                    f"目前={current_pulses} "
+                    f"目標={target_pulses}"
+                )
+
                 break
+
+
             time.sleep(0.05)
 
+
     except Exception as e:
-        print(f"❌ ID {getattr(motor, 'slave_id', '?')} move_and_monitor error: {e}")
+
+        print(
+            f"❌ ID "
+            f"{getattr(motor, 'slave_id', '?')} "
+            f"move_and_monitor error: {e}"
+        )
 
 class RobotRuntime:
     def __init__(self, args, ready_event: threading.Event, stop_event: threading.Event):
@@ -329,25 +398,61 @@ class RobotRuntime:
                 continue
 
             # 只控制 motors 數量那幾個角度
-            distances = [abs(angle_list[i] - self.previous_angles[i]) for i in range(len(self.motors))]
+            distances = [
+                abs(angle_list[i] - self.previous_angles[i])
+                for i in range(len(self.motors))
+            ]
+
             max_distance = max(distances) if distances else 0
 
+
+            # ============================================
+            # 動作前安全檢查
+            # ID 7、12、17、21
+            # 任一顆無回覆 → 禁止動作並停止流程
+            # ============================================
+            if max_distance > 0:
+                check_ok = self.read_before_move_motors()
+
+                if not check_ok:
+                    print("")
+                    print("🛑 動作前安全檢查失敗")
+                    print("🛑 本次動作禁止執行")
+                    print("🛑 RobotRuntime 停止")
+                    print("")
+
+                    self.stop_event.set()
+                    break
+
+
+            # ============================================
+            # 安全檢查成功後才開始動作
+            # ============================================
             threads = []
+
             if max_distance > 0:
                 for i, motor in enumerate(self.motors):
                     curr = angle_list[i]
                     prev = self.previous_angles[i]
                     dist = abs(curr - prev)
+
                     if dist == 0:
                         continue
-                    speed = proportional_speed(dist, max_distance,
-                                               getattr(motor, "max_rpm", 1500),
-                                               ratio=self.args.speed_ratio)
-                    t = threading.Thread(target=move_and_monitor,
-                                         args=(motor, curr, speed, self.args.tolerance))
+
+                    speed = proportional_speed(
+                        dist,
+                        max_distance,
+                        getattr(motor, "max_rpm", 1500),
+                        ratio=self.args.speed_ratio
+                    )
+
+                    t = threading.Thread(
+                        target=move_and_monitor,
+                        args=(motor, curr, speed, self.args.tolerance)
+                    )
+
                     t.start()
                     threads.append(t)
-
             # 同步下發手勢（若有）
             if L_idx is not None and R_idx is not None:
                 def _hand_job():
@@ -376,6 +481,44 @@ class RobotRuntime:
 
             print("✅ 本輪完成，等待下一筆…")
             time.sleep(0.01)
+
+    def read_before_move_motors(self):
+        motor_ids = list(range(1, 22))
+
+        print("\n============================================")
+        print("🔍 動作前馬達通訊安全檢查")
+        print("Motor ID：1～21")
+        print("============================================")
+
+        for motor_id in motor_ids:
+            try:
+                motor = self.motors[motor_id - 1]
+
+                if not motor.check_alive():
+                    print("")
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    print(f"❌ Motor ID {motor_id} 無法正常通訊")
+                    print("❌ 本次動作禁止執行")
+                    print("❌ Robot 流程停止")
+                    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    print("")
+
+                    return False
+
+            except Exception as e:
+                print("")
+                print(f"❌ Motor ID {motor_id} 檢查異常：{e}")
+                print("❌ 本次動作禁止執行")
+                print("")
+
+                return False
+
+        print("")
+        print("✅ ID 1～21 通訊全部正常")
+        print("✅ 允許執行本次動作")
+        print("")
+
+        return True
 
 
     def close(self):
